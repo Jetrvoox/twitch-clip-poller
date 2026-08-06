@@ -1,0 +1,5 @@
+.env
+.token_cache.json
+clips.db
+__pycache__/
+*.pyc
