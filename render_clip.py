@@ -48,6 +48,9 @@ FONT_PATH = r"C:\Windows\Fonts\arialbd.ttf"
 OUTPUT_WIDTH = 1080
 OUTPUT_HEIGHT = 1920
 
+OVERLAY_VISIBLE_SECONDS = 4
+OVERLAY_FADE_SECONDS = 1.5
+
 # Twitch's undocumented GQL endpoint, used the same way public clip-downloader
 # tools use it - NOT the app Client-Id/Secret from auth.py, this is a
 # different, unofficial, public web client id.
@@ -184,15 +187,24 @@ def _run_ffmpeg(ffmpeg_path, source_path, dest_path, overlay_text_path):
     # apostrophes/colons that can show up in broadcaster names.
     font_path_escaped = FONT_PATH.replace("\\", "/").replace(":", r"\:")
     text_path_escaped = overlay_text_path.replace("\\", "/").replace(":", r"\:")
-    # Positioned near the top, not bottom - bottom-of-frame is where game
-    # HUDs/captions/killfeeds usually live, and the overlay collided with
-    # burned-in Twitch captions there on a real test clip.
+    # Bottom-left, visible for a few seconds then faded out - rather than
+    # sitting on screen for the whole clip. alpha is an expression in t
+    # (seconds): full opacity until OVERLAY_VISIBLE_SECONDS, linear fade
+    # to 0 over OVERLAY_FADE_SECONDS, gone for the rest of the clip.
+    # ffmpeg's drawtext alpha scales the box along with the text, so both
+    # fade together instead of leaving a bare box behind.
+    alpha_expr = (
+        f"if(lt(t,{OVERLAY_VISIBLE_SECONDS}),1,"
+        f"if(lt(t,{OVERLAY_VISIBLE_SECONDS + OVERLAY_FADE_SECONDS}),"
+        f"({OVERLAY_VISIBLE_SECONDS + OVERLAY_FADE_SECONDS}-t)/{OVERLAY_FADE_SECONDS},0))"
+    )
     vf = (
         f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:force_original_aspect_ratio=increase,"
         f"crop={OUTPUT_WIDTH}:{OUTPUT_HEIGHT},"
         f"drawtext=fontfile='{font_path_escaped}':textfile='{text_path_escaped}':"
-        f"fontcolor=white:fontsize=48:x=(w-text_w)/2:y=60:"
-        f"box=1:boxcolor=black@0.5:boxborderw=16"
+        f"fontcolor=white:fontsize=48:x=40:y=h-text_h-60:"
+        f"box=1:boxcolor=black@0.5:boxborderw=16:"
+        f"alpha='{alpha_expr}'"
     )
     part_path = dest_path + ".part.mp4"
     result = subprocess.run(
@@ -214,7 +226,7 @@ def _run_ffmpeg(ffmpeg_path, source_path, dest_path, overlay_text_path):
 
 def render_clip(ffmpeg_path, clip_id, broadcaster_name):
     video_url = _resolve_source_video_url(clip_id)
-    overlay_text = f"clip via {broadcaster_name or 'unknown'}"
+    overlay_text = f"clip from {broadcaster_name or 'unknown'}"
 
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     source_path = os.path.join(PROCESSED_DIR, f"{clip_id}_source.mp4")
