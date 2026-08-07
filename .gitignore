@@ -3,3 +3,4 @@
 clips.db
 __pycache__/
 *.pyc
+poller_task.log
