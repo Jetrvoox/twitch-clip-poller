@@ -1,3 +1,5 @@
 requests
 python-dotenv
 discord.py
+# No dedicated Shotstack SDK is used - it's a plain REST API and a couple
+# of `requests` calls (submit render, poll status, download result) covers it fully.
